@@ -27,6 +27,12 @@ input:focus,select:focus{outline:2px solid var(--pri);border-color:transparent}
 .msg{color:var(--err);font-size:13px;min-height:18px;margin-top:6px}
 .btn{width:100%;padding:15px;font-size:17px;font-weight:700;border:0;border-radius:12px;background:var(--pri);color:var(--priTx);margin-top:6px}
 .btn.sec{background:transparent;color:var(--tx);border:1px solid var(--bd);font-weight:500;font-size:15px}
+.cov{display:none;margin-top:10px;padding:10px 12px;border-radius:10px;border:1px solid var(--bd);font-size:14px;line-height:1.45;color:var(--tx)}
+.cov.show{display:block}
+.cov.ok{background:rgba(37,211,102,.16);border-color:#25a05a}
+.cov.bad{background:rgba(229,57,53,.14);border-color:#d32f2f}
+.cov.warn,.cov.info{background:rgba(255,167,38,.16);border-color:#e69100}
+.btn.chk{margin-top:10px;padding:11px;font-size:15px}
 #cfg{display:none}
 #cfg.on{display:block}
 small{color:var(--mut)}
@@ -65,6 +71,8 @@ small{color:var(--mut)}
 <div><label for="uf">UF</label>
 <select id="uf"><option value="">—</option></select></div>
 </div>
+<button type="button" class="btn sec chk" id="chkCov">Checar cobertura Nio</button>
+<div class="cov" id="cov" role="status"></div>
 </div>
 
 <div class="card">
@@ -117,6 +125,34 @@ if(!ls("sup"))$("cfg").classList.add("on");
 
 $("clear").onclick=function(){if(confirm("Limpar todos os campos?")){F.forEach(function(f){$(f).value="";$(f).classList.remove("bad")});ls("draft",null);$("msg").textContent=""}};
 
+var cov="";
+function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function covShow(cls,html){var b=$("cov");b.className="cov show "+cls;b.innerHTML=html}
+function covHide(){var b=$("cov");b.className="cov";b.innerHTML="";cov=""}
+function checkCov(){
+var c=digits($("cep").value);
+if(c.length!==8){covShow("warn","Digite o CEP com 8 dígitos.");cov="";return}
+covShow("info","Consultando a Nio...");
+fetch("https://api.niointernet.app.br/commerce/geographicAddressSearch/v1/addresses/autocomplete/"+c)
+.then(function(r){if(!r.ok)throw new Error("erro "+r.status);return r.json()})
+.then(function(j){
+if(digits($("cep").value)!==c)return;
+var r0=(j&&j.results&&j.results[0])||null;
+if(!r0){cov="SEM COBERTURA (CEP não encontrado na Nio)";covShow("bad","<b>Sem cobertura</b><br>CEP não encontrado na base da Nio.");return}
+var addr=[r0.logradouro,r0.bairro,(r0.cidade||"")+(r0.uf?"-"+r0.uf:"")].filter(Boolean).join(", ");
+var sit=String(r0.situacao||"").toLowerCase();
+var ok=sit==="coberto";
+var m=r0.ceps&&r0.ceps[0]&&r0.ceps[0].naMancha;
+if(r0.uf&&!$("uf").value){$("uf").value=r0.uf}
+if(!$("end").value.trim()&&r0.logradouro){$("end").value=[r0.logradouro,r0.bairro,r0.cidade].filter(Boolean).join(", ")}
+save();
+if(ok){cov="COM COBERTURA"+(m===true?" (na mancha)":"");covShow("ok","<b>Com cobertura de fibra</b><br>"+esc(addr)+(m===true?"<br>Na mancha de cobertura: sim":m===false?"<br>Na mancha de cobertura: não":""))}
+else{cov="SEM COBERTURA (situação: "+(r0.situacao||"não informada")+")";covShow("bad","<b>Sem cobertura confirmada</b><br>"+esc(addr)+"<br>Situação: "+esc(r0.situacao||"não informada"))}
+})
+.catch(function(e){cov="";covShow("warn","Não foi possível consultar ("+esc(e.message)+"). Verifique a internet e tente de novo.")});
+}
+$("chkCov").onclick=checkCov;
+$("cep").addEventListener("input",function(){var n=digits($("cep").value).length;if(n===8)checkCov();else covHide()});
 $("send").onclick=function(){
 var v={};F.forEach(function(f){v[f]=$(f).value.trim();$(f).classList.remove("bad")});
 var miss=[];
@@ -142,7 +178,7 @@ var t="*NOVO CADASTRO*\n\n"+
 "*UF:* "+v.uf+"\n\n"+
 "*PLANO:* "+v.plano+"\n"+
 "*FORMA DE PAGAMENTO:* "+v.pag+"\n"+
-"*TURNO DE INSTALAÇÃO:* "+v.turno;
+"*TURNO DE INSTALAÇÃO:* "+v.turno+(cov?"\n*COBERTURA:* "+cov:"");
 var n=digits(ls("sup")||"");
 if(n&&n.length<=11)n="55"+n;
 var url="https://wa.me/"+n+"?text="+encodeURIComponent(t);
