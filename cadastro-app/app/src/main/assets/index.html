@@ -71,8 +71,12 @@ small{color:var(--mut)}
 <div><label for="uf">UF</label>
 <select id="uf"><option value="">—</option></select></div>
 </div>
-<button type="button" class="btn sec chk" id="chkCov">Checar cobertura Nio</button>
+<label for="num">Número do imóvel (para a consulta)</label>
+<input id="num" inputmode="numeric" placeholder="Ex.: 109" autocomplete="off">
+<button type="button" class="btn sec chk" id="openNio">Confirmar no site da Nio</button>
 <div class="cov" id="cov" role="status"></div>
+<label for="covSel">Resultado da consulta</label>
+<select id="covSel"><option value="">Não consultado</option><option>COM COBERTURA DE FIBRA</option><option>SEM COBERTURA</option></select>
 </div>
 
 <div class="card">
@@ -123,36 +127,40 @@ ls("sup",d||null);$("cfg").classList.remove("on");
 };
 if(!ls("sup"))$("cfg").classList.add("on");
 
-$("clear").onclick=function(){if(confirm("Limpar todos os campos?")){F.forEach(function(f){$(f).value="";$(f).classList.remove("bad")});ls("draft",null);$("msg").textContent=""}};
+$("clear").onclick=function(){if(confirm("Limpar todos os campos?")){$("num").value="";$("covSel").value="";covHide();F.forEach(function(f){$(f).value="";$(f).classList.remove("bad")});ls("draft",null);$("msg").textContent=""}};
 
-var cov="";
+var cityNio="";
 function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function norm(t){return (t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase()}
 function covShow(cls,html){var b=$("cov");b.className="cov show "+cls;b.innerHTML=html}
-function covHide(){var b=$("cov");b.className="cov";b.innerHTML="";cov=""}
-function checkCov(){
+function covHide(){var b=$("cov");b.className="cov";b.innerHTML="";cityNio=""}
+function lookupCep(){
 var c=digits($("cep").value);
-if(c.length!==8){covShow("warn","Digite o CEP com 8 dígitos.");cov="";return}
-covShow("info","Consultando a Nio...");
-fetch("https://api.niointernet.app.br/commerce/geographicAddressSearch/v1/addresses/autocomplete/"+c)
+if(c.length!==8)return;
+covShow("info","Buscando endereço...");
+fetch("https://viacep.com.br/ws/"+c+"/json/")
 .then(function(r){if(!r.ok)throw new Error("erro "+r.status);return r.json()})
 .then(function(j){
 if(digits($("cep").value)!==c)return;
-var r0=(j&&j.results&&j.results[0])||null;
-if(!r0){cov="SEM COBERTURA (CEP não encontrado na Nio)";covShow("bad","<b>Sem cobertura</b><br>CEP não encontrado na base da Nio.");return}
-var addr=[r0.logradouro,r0.bairro,(r0.cidade||"")+(r0.uf?"-"+r0.uf:"")].filter(Boolean).join(", ");
-var sit=String(r0.situacao||"").toLowerCase();
-var ok=sit==="coberto";
-var m=r0.ceps&&r0.ceps[0]&&r0.ceps[0].naMancha;
-if(r0.uf&&!$("uf").value){$("uf").value=r0.uf}
-if(!$("end").value.trim()&&r0.logradouro){$("end").value=[r0.logradouro,r0.bairro,r0.cidade].filter(Boolean).join(", ")}
+if(j.erro){cityNio="";covShow("warn","CEP não encontrado.");return}
+cityNio=norm(j.localidade);
+if(j.uf)$("uf").value=j.uf;
+if(!$("end").value.trim()&&j.logradouro){$("end").value=[j.logradouro,j.bairro,j.localidade].filter(Boolean).join(", ")}
 save();
-if(ok){cov="COM COBERTURA"+(m===true?" (na mancha)":"");covShow("ok","<b>Com cobertura de fibra</b><br>"+esc(addr)+(m===true?"<br>Na mancha de cobertura: sim":m===false?"<br>Na mancha de cobertura: não":""))}
-else{cov="SEM COBERTURA (situação: "+(r0.situacao||"não informada")+")";covShow("bad","<b>Sem cobertura confirmada</b><br>"+esc(addr)+"<br>Situação: "+esc(r0.situacao||"não informada"))}
+covShow("ok","<b>Endereço encontrado</b><br>"+esc([j.logradouro,j.bairro,(j.localidade||"")+"-"+(j.uf||"")].filter(Boolean).join(", "))+"<br>Agora toque em <b>Confirmar no site da Nio</b> para ver a cobertura do número exato.");
 })
-.catch(function(e){cov="";covShow("warn","Não foi possível consultar ("+esc(e.message)+"). Verifique a internet e tente de novo.")});
+.catch(function(e){covShow("warn","Não foi possível buscar o endereço ("+esc(e.message)+"). Você ainda pode confirmar no site da Nio.")});
 }
-$("chkCov").onclick=checkCov;
-$("cep").addEventListener("input",function(){var n=digits($("cep").value).length;if(n===8)checkCov();else covHide()});
+$("cep").addEventListener("input",function(){var n=digits($("cep").value).length;if(n===8)lookupCep();else covHide()});
+$("openNio").onclick=function(){
+var c=digits($("cep").value);
+if(c.length!==8){covShow("warn","Digite o CEP com 8 dígitos.");$("cep").focus();return}
+var q=["postCode="+c];
+var n=$("num").value.trim();if(n)q.push("number="+encodeURIComponent(n));
+if(cityNio)q.push("city="+encodeURIComponent(cityNio));
+if($("uf").value)q.push("stateOrProvince="+encodeURIComponent($("uf").value));
+window.location.href="https://checkout.niointernet.com.br/?"+q.join("&");
+};
 $("send").onclick=function(){
 var v={};F.forEach(function(f){v[f]=$(f).value.trim();$(f).classList.remove("bad")});
 var miss=[];
@@ -178,7 +186,7 @@ var t="*NOVO CADASTRO*\n\n"+
 "*UF:* "+v.uf+"\n\n"+
 "*PLANO:* "+v.plano+"\n"+
 "*FORMA DE PAGAMENTO:* "+v.pag+"\n"+
-"*TURNO DE INSTALAÇÃO:* "+v.turno+(cov?"\n*COBERTURA:* "+cov:"");
+"*TURNO DE INSTALAÇÃO:* "+v.turno+($("covSel").value?"\n*COBERTURA:* "+$("covSel").value:"");
 var n=digits(ls("sup")||"");
 if(n&&n.length<=11)n="55"+n;
 var url="https://wa.me/"+n+"?text="+encodeURIComponent(t);
