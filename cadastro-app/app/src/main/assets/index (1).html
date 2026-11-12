@@ -73,6 +73,8 @@ small{color:var(--mut)}
 </div>
 <label for="num">Número do imóvel (para a consulta)</label>
 <input id="num" inputmode="numeric" placeholder="Ex.: 109" autocomplete="off">
+<label for="comp">Complemento (casa, apto, bloco)</label>
+<input id="comp" placeholder="Ex.: Casa ou Apto 12 Bloco B" autocomplete="off">
 <button type="button" class="btn sec chk" id="openNio">Confirmar no site da Nio</button>
 <div class="cov" id="cov" role="status"></div>
 <label for="covSel">Resultado da consulta</label>
@@ -114,9 +116,10 @@ mask("cpf",mCpf);mask("tel",mTel);mask("cep",mCep);mask("sup",mTel);
 function cpfOk(c){c=digits(c);if(c.length!==11||/^(\d)\1+$/.test(c))return false;
 for(var t=9;t<11;t++){var s=0;for(var i=0;i<t;i++)s+=c[i]*(t+1-i);var r=(s*10)%11%10;if(r!=c[t])return false}return true}
 
-function save(){var o={};F.forEach(function(f){o[f]=$(f).value});ls("draft",JSON.stringify(o))}
-F.forEach(function(f){$(f).addEventListener("input",save);$(f).addEventListener("change",save)});
-try{var d=JSON.parse(ls("draft")||"{}");F.forEach(function(f){if(d[f])$(f).value=d[f]})}catch(e){}
+var X=["num","comp","covSel"];
+function save(){var o={};F.concat(X).forEach(function(f){o[f]=$(f).value});ls("draft",JSON.stringify(o))}
+F.concat(X).forEach(function(f){$(f).addEventListener("input",save);$(f).addEventListener("change",save)});
+try{var d=JSON.parse(ls("draft")||"{}");F.concat(X).forEach(function(f){if(d[f])$(f).value=d[f]})}catch(e){}
 $("sup").value=ls("sup")||"";
 
 $("gear").onclick=function(){$("cfg").classList.toggle("on")};
@@ -127,7 +130,7 @@ ls("sup",d||null);$("cfg").classList.remove("on");
 };
 if(!ls("sup"))$("cfg").classList.add("on");
 
-$("clear").onclick=function(){if(confirm("Limpar todos os campos?")){$("num").value="";$("covSel").value="";covHide();F.forEach(function(f){$(f).value="";$(f).classList.remove("bad")});ls("draft",null);$("msg").textContent=""}};
+$("clear").onclick=function(){if(confirm("Limpar todos os campos?")){$("num").value="";$("comp").value="";$("covSel").value="";covHide();F.forEach(function(f){$(f).value="";$(f).classList.remove("bad")});ls("draft",null);$("msg").textContent=""}};
 
 var cityNio="";
 function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
@@ -157,6 +160,7 @@ var c=digits($("cep").value);
 if(c.length!==8){covShow("warn","Digite o CEP com 8 dígitos.");$("cep").focus();return}
 var q=["postCode="+c];
 var n=$("num").value.trim();if(n)q.push("number="+encodeURIComponent(n));
+var cp=$("comp").value.trim();if(cp)q.push("complement="+encodeURIComponent(cp));
 if(cityNio)q.push("city="+encodeURIComponent(cityNio));
 if($("uf").value)q.push("stateOrProvince="+encodeURIComponent($("uf").value));
 window.location.href="https://checkout.niointernet.com.br/?"+q.join("&");
