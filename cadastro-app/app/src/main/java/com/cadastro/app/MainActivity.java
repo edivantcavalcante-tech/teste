@@ -36,7 +36,12 @@ public class MainActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
                 Uri u = req.getUrl();
                 String scheme = u.getScheme();
+                String host = u.getHost() == null ? "" : u.getHost();
                 if ("file".equals(scheme)) return false;
+                boolean isWeb = "https".equals(scheme) || "http".equals(scheme);
+                if (isWeb && (host.endsWith("niointernet.com.br") || host.endsWith("niointernet.app.br"))) {
+                    return false; // abre o site da Nio dentro do app
+                }
                 try {
                     startActivity(new Intent(Intent.ACTION_VIEW, u));
                 } catch (Exception e) {
@@ -61,6 +66,10 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        finish();
+        if (web.canGoBack()) {
+            web.goBack();
+        } else {
+            finish();
+        }
     }
 }
