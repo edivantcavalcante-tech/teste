@@ -73,6 +73,8 @@ small{color:var(--mut)}
 </div>
 <label for="num">Número do imóvel (para a consulta)</label>
 <input id="num" inputmode="numeric" placeholder="Ex.: 109" autocomplete="off">
+<label for="comp">Complemento (casa, apto, bloco)</label>
+<input id="comp" placeholder="Ex.: Casa ou Apto 12 Bloco B" autocomplete="off">
 <button type="button" class="btn sec chk" id="openNio">Confirmar no site da Nio</button>
 <div class="cov" id="cov" role="status"></div>
 <label for="covSel">Resultado da consulta</label>
@@ -114,9 +116,10 @@ mask("cpf",mCpf);mask("tel",mTel);mask("cep",mCep);mask("sup",mTel);
 function cpfOk(c){c=digits(c);if(c.length!==11||/^(\d)\1+$/.test(c))return false;
 for(var t=9;t<11;t++){var s=0;for(var i=0;i<t;i++)s+=c[i]*(t+1-i);var r=(s*10)%11%10;if(r!=c[t])return false}return true}
 
-function save(){var o={};F.forEach(function(f){o[f]=$(f).value});ls("draft",JSON.stringify(o))}
-F.forEach(function(f){$(f).addEventListener("input",save);$(f).addEventListener("change",save)});
-try{var d=JSON.parse(ls("draft")||"{}");F.forEach(function(f){if(d[f])$(f).value=d[f]})}catch(e){}
+var X=["num","comp","covSel"];
+function save(){var o={};F.concat(X).forEach(function(f){o[f]=$(f).value});ls("draft",JSON.stringify(o))}
+F.concat(X).forEach(function(f){$(f).addEventListener("input",save);$(f).addEventListener("change",save)});
+try{var d=JSON.parse(ls("draft")||"{}");F.concat(X).forEach(function(f){if(d[f])$(f).value=d[f]})}catch(e){}
 $("sup").value=ls("sup")||"";
 
 $("gear").onclick=function(){$("cfg").classList.toggle("on")};
@@ -127,36 +130,48 @@ ls("sup",d||null);$("cfg").classList.remove("on");
 };
 if(!ls("sup"))$("cfg").classList.add("on");
 
-$("clear").onclick=function(){if(confirm("Limpar todos os campos?")){$("num").value="";$("covSel").value="";covHide();F.forEach(function(f){$(f).value="";$(f).classList.remove("bad")});ls("draft",null);$("msg").textContent=""}};
+$("clear").onclick=function(){if(confirm("Limpar todos os campos?")){$("num").value="";$("comp").value="";$("covSel").value="";covHide();F.forEach(function(f){$(f).value="";$(f).classList.remove("bad")});ls("draft",null);$("msg").textContent=""}};
 
 var cityNio="";
 function esc(t){return String(t==null?"":t).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
 function norm(t){return (t||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase()}
 function covShow(cls,html){var b=$("cov");b.className="cov show "+cls;b.innerHTML=html}
-function covHide(){var b=$("cov");b.className="cov";b.innerHTML="";cityNio=""}
+function covHide(){var b=$("cov");b.className="cov";b.innerHTML="";cityNio="";ls("cepinfo",null)}
+var lastAuto="";
+function applyCep(d){
+cityNio=norm(d.localidade);
+if(d.uf)$("uf").value=d.uf;
+var line=[d.logradouro,d.bairro,d.localidade].filter(Boolean).join(", ");
+var cur=$("end").value.trim();
+if(line&&(!cur||cur===lastAuto)){$("end").value=line;lastAuto=line}
+save();
+var html="<b>Endereço encontrado</b><br>"+esc([d.logradouro,d.bairro,(d.localidade||"")+"-"+(d.uf||"")].filter(Boolean).join(", "))+"<br>Agora toque em <b>Confirmar no site da Nio</b> para ver a cobertura do número exato.";
+covShow("ok",html);
+ls("cepinfo",JSON.stringify({c:digits($("cep").value),city:cityNio,auto:lastAuto,html:html}));
+}
 function lookupCep(){
 var c=digits($("cep").value);
 if(c.length!==8)return;
 covShow("info","Buscando endereço...");
-fetch("https://viacep.com.br/ws/"+c+"/json/")
-.then(function(r){if(!r.ok)throw new Error("erro "+r.status);return r.json()})
-.then(function(j){
-if(digits($("cep").value)!==c)return;
-if(j.erro){cityNio="";covShow("warn","CEP não encontrado.");return}
-cityNio=norm(j.localidade);
-if(j.uf)$("uf").value=j.uf;
-if(!$("end").value.trim()&&j.logradouro){$("end").value=[j.logradouro,j.bairro,j.localidade].filter(Boolean).join(", ")}
-save();
-covShow("ok","<b>Endereço encontrado</b><br>"+esc([j.logradouro,j.bairro,(j.localidade||"")+"-"+(j.uf||"")].filter(Boolean).join(", "))+"<br>Agora toque em <b>Confirmar no site da Nio</b> para ver a cobertura do número exato.");
-})
-.catch(function(e){covShow("warn","Não foi possível buscar o endereço ("+esc(e.message)+"). Você ainda pode confirmar no site da Nio.")});
+function viacep(){return fetch("https://viacep.com.br/ws/"+c+"/json/").then(function(r){if(!r.ok)throw new Error("erro "+r.status);return r.json()}).then(function(j){if(j.erro)throw new Error("CEP não encontrado");return {logradouro:j.logradouro,bairro:j.bairro,localidade:j.localidade,uf:j.uf}})}
+function brasil(){return fetch("https://brasilapi.com.br/api/cep/v2/"+c).then(function(r){if(!r.ok)throw new Error("CEP não encontrado");return r.json()}).then(function(j){return {logradouro:j.street,bairro:j.neighborhood,localidade:j.city,uf:j.state}})}
+viacep().catch(brasil).then(function(d){if(digits($("cep").value)!==c)return;applyCep(d)})
+.catch(function(e){if(digits($("cep").value)!==c)return;covShow("warn","Não foi possível buscar o endereço ("+esc(e.message)+"). Você ainda pode confirmar no site da Nio.")});
 }
 $("cep").addEventListener("input",function(){var n=digits($("cep").value).length;if(n===8)lookupCep();else covHide()});
+(function(){
+var c=digits($("cep").value);
+if(c.length!==8)return;
+var info=null;try{info=JSON.parse(ls("cepinfo")||"null")}catch(e){}
+if(info&&info.c===c){cityNio=info.city||"";lastAuto=info.auto||"";covShow("ok",info.html)}
+else lookupCep();
+})();
 $("openNio").onclick=function(){
 var c=digits($("cep").value);
 if(c.length!==8){covShow("warn","Digite o CEP com 8 dígitos.");$("cep").focus();return}
 var q=["postCode="+c];
 var n=$("num").value.trim();if(n)q.push("number="+encodeURIComponent(n));
+var cp=$("comp").value.trim();if(cp)q.push("complement="+encodeURIComponent(cp));
 if(cityNio)q.push("city="+encodeURIComponent(cityNio));
 if($("uf").value)q.push("stateOrProvince="+encodeURIComponent($("uf").value));
 window.location.href="https://checkout.niointernet.com.br/?"+q.join("&");
